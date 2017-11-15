@@ -457,7 +457,7 @@ int TestKernelProtectMemoryRwxPte()
         printf("CreateFileA: %lu\n", GetLastError());
         return -1;
     }
-    printf("[*] Opened driver handle: 0x%08x\n", hDevice);
+    printf("[*] Opened driver handle: 0x%p\n", hDevice);
 
     char *addr = (char *)VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (!addr) {

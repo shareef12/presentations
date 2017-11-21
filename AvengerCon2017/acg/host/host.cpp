@@ -477,6 +477,14 @@ int TestKernelProtectMemoryRwxPte()
         printf("[+] Fault caught! 0x%p is not executable!\n", addr);
     }
 
+    MEMORY_BASIC_INFORMATION meminfo = { 0 };
+    SIZE_T sz = VirtualQuery(addr, &meminfo, sizeof(meminfo));
+    if (sz == 0) {
+        printf("VirtualQuery: %lu\n", GetLastError());
+        return -1;
+    }
+    printf("[*] Region 0x%p: AllocationProtect = %08x  Protect = %08x\n", addr, meminfo.AllocationProtect, meminfo.Protect);
+
     ULONG nBytesReturned = 0;
     BOOLEAN success = DeviceIoControl(hDevice, IOCTL_PROTECT_MEMORY_RWX_PTE, &addr, sizeof(addr), NULL, 0, &nBytesReturned, NULL);
     if (!success || GetLastError()) {
@@ -484,6 +492,14 @@ int TestKernelProtectMemoryRwxPte()
         return -1;
     }
     printf("[*] Updated allocated page permissions to RWX\n");
+
+    memset(&meminfo, 0, sizeof(meminfo));
+    sz = VirtualQuery(addr, &meminfo, sizeof(meminfo));
+    if (sz == 0) {
+        printf("VirtualQuery: %lu\n", GetLastError());
+        return -1;
+    }
+    printf("[*] Region 0x%p: AllocationProtect = %08x  Protect = %08x\n", addr, meminfo.AllocationProtect, meminfo.Protect);
 
     // Should have overwritten StubFunction with an infinite loop
     printf("[*] Calling 0x%p - should hang on success\n", addr);

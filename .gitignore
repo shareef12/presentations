@@ -58,3 +58,15 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Latex intermediate artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb

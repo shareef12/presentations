@@ -1,0 +1,369 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Focus Beamer Presentation
+% LaTeX Template
+% Version 1.0 (8/8/18)
+%
+% This template has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% Original author:
+% Pasquale Africa (https://github.com/elauksap/focus-beamertheme) with modifications by
+% Vel (vel@LaTeXTemplates.com)
+%
+% Template license:
+% GNU GPL v3.0 License
+%
+% Important note:
+% The bibliography/references need to be compiled with bibtex.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%    PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass{beamer}
+
+\usetheme{focus} % Use the Focus theme supplied with the template
+% Add option [numbering=none] to disable the footer progress bar
+% Add option [numbering=fullbar] to show the footer progress bar as always full with a slide count
+
+% Uncomment to enable the ice-blue theme
+%\definecolor{main}{RGB}{92, 138, 168}
+%\definecolor{background}{RGB}{240, 247, 255}
+
+%------------------------------------------------
+
+\usepackage{booktabs} % Required for better table rules
+\usepackage{listings}
+
+\lstset{
+    escapeinside=||
+}
+
+\newcommand{\todo}[1]{\color{red}{TODO: #1}}
+
+%----------------------------------------------------------------------------------------
+%     TITLE SLIDE
+%----------------------------------------------------------------------------------------
+
+\title{Introduction to Clang/LLVM}
+
+%\subtitle{Subtitle}
+
+\author{Christian Sharpsten}
+
+\titlegraphic{\includegraphics[scale=0.6]{images/llvm_logo_derivative.png}} % Optional title page image, comment this line to remove it
+
+\institute{\todo{\\ Institute Name \\ Institute Address}}
+
+\date{01 NOV 2019}
+
+%------------------------------------------------
+
+\begin{document}
+
+%------------------------------------------------
+
+\begin{frame}
+    \maketitle % Automatically created using the information in the commands above
+\end{frame}
+
+\begin{frame}{Outline}
+    \begin{itemize}
+        \item Background
+        \item LLVM Compilation Process
+        \item Writing an Optimization Pass
+    \end{itemize}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 1
+%----------------------------------------------------------------------------------------
+
+\section{Background} % Section title slide, unnumbered
+
+%------------------------------------------------
+
+\begin{frame}{What is LLVM?}
+    This is a simple slide.
+    Keystone/Capstone/McSema/Other tools
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Why LLVM?}
+
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{General Compilation Process}
+
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{General Compilation Process (Lexing/Parsing)}
+    This slide is not numbered and is citing reference \cite{knuth74}.
+    SSA/AST
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{General Compilation Process (Code Generation)}
+    This slide is not numbered and is citing reference \cite{knuth74}.
+    Three-address code
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Typesetting and Math}
+    The packages \texttt{inputenc} and \texttt{FiraSans}\footnote{\url{https://fonts.google.com/specimen/Fira+Sans}}\textsuperscript{,}\footnote{\url{http://mozilla.github.io/Fira/}} are used to properly set the main fonts.
+    \vfill
+    This theme provides styling commands to typeset \emph{emphasized}, \alert{alerted}, \textbf{bold}, \textcolor{example}{example text}, \dots
+    \vfill
+    \texttt{FiraSans} also provides support for mathematical symbols:
+    \begin{equation*}
+        e^{i\pi} + 1 = 0.
+    \end{equation*}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 2
+%----------------------------------------------------------------------------------------
+
+\section{LLVM Compilation Process}
+
+%------------------------------------------------
+
+\begin{frame}{LLVM Sub-Projects}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{LLVM Tools}
+General overview
+List of llvm tools and how they align with the compilation process
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Clang: Pre-Processing}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Clang: Lexing}
+DFA
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Clang: Parsing}
+AST
+Bitcode generation
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Opt: Optimization}
+Bitcode parsing
+How to view passes?
+How to run one pass?
+Sampling of some important ones (SROA, DCE, etc)
+Module/Function/BB passes
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Llc: Code Generation}
+Tablegen
+DAG and Legalization
+Register allocation
+Arch-specific optimizations?
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 3
+%----------------------------------------------------------------------------------------
+
+\section{Writing an Optimization Pass}
+
+%------------------------------------------------
+
+\begin{frame}{Building LLVM}
+    \begin{itemize}
+        \item LLVM switched from svn to a single git monorepo as of 21 OCT 2019 (exciting!)
+        \item LLVM uses CMake. You can control the build in a number of ways:
+        \begin{itemize}
+            \item Generator (Ninja, Unix Makefiles, VS, Xcode)
+            \item Build type (Debug, Release, RelWithDebInfo, MinSizeRel)
+            \item Enabled sub-projects (test suite, libcxx, lldb, lld, etc.)
+            \item Backend targets (X86, Mips, PowerPC, etc.)
+        \end{itemize}
+        \item Depending on which features you enable, LLVM can take a long time to compile.
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Building LLVM}
+    For this exercise, we only need to build Clang and the X86 backend.
+
+    \begin{lstlisting}[gobble=4]
+    $ git clone https://github.com/llvm/llvm-project.git |\pause|
+    $ cd llvm-project && git checkout llvmorg-9.0.0 |\pause|
+    $ mkdir build && cd build |\pause|
+    $ cmake -G Ninja                    \
+        -DLLVM_ENABLE_PROJECTS='clang'  \
+        -DCMAKE_BUILD_TYPE=Debug        \
+        -DLLVM_TARGETS_TO_BUILD=X86
+        ../llvm |\pause|
+    $ time ninja
+
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Building LLVM}
+LLVM can take a while to compile...
+
+    \begin{table}
+        \centering % Centre the table on the slide
+        \begin{tabular}{l c c c c}
+            \toprule
+            Generator & Build Type & Sub-Projects & Targets & Time (m) \\
+            \toprule
+            \textbf{Ninja} & \textbf{Debug} & \textbf{Clang} & \textbf{X86} & \textbf{120.15} \\
+            Ninja & Release & Clang & X86 & 0.00 \\
+            Ninja & Debug & Clang & All & 0.00 \\
+            Ninja & Release & Clang & All & 0.00 \\
+            Make & Debug & Clang & X86 & 0.00 \\
+            Make (-j12) & Debug & Clang & X86 & 0.00 \\
+            \bottomrule
+        \end{tabular}
+        \caption{LLVM Compile Time Benchmarks (6-core, 16GB RAM Ubunut 18.04 VM)}
+    \end{table}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{LLVM IR}
+    Intro to some of the basic instructions
+\end{frame}
+
+\begin{frame}{LLVM IR}
+    C code for a short sample
+\end{frame}
+
+\begin{frame}{LLVM IR}
+    IR for the same sample
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Writing a Pass}
+    Skeleton Code for a pass
+    \todo{Module/function/bb pass?}
+\end{frame}
+
+\begin{frame}{Writing a Pass}
+    Hello world pass
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{A More Complex Pass}
+    \todo{Bogus arguments? Constant obfuscation? Detect vuln strcpy? Taint tracing?}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{ExtractBB Pass}
+    Liveness analysis
+\end{frame}
+
+\begin{frame}{ExtractBB Pass}
+    Demo with IDA screenshots
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Columns}
+    \begin{columns}
+        \column{0.5\textwidth}
+            This text appears in the left column and wraps neatly with a margin between columns.
+
+        \column{0.5\textwidth}
+            \includegraphics[width=\linewidth]{Images/placeholder.jpg}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Lists}
+    \begin{columns}[T, onlytextwidth] % T for top align, onlytextwidth to suppress the margin between columns
+        \column{0.33\textwidth}
+            Items:
+            \begin{itemize}
+                \item Item 1
+                \begin{itemize}
+                    \item Subitem 1.1
+                    \item Subitem 1.2
+                \end{itemize}
+                \item Item 2
+                \item Item 3
+            \end{itemize}
+
+        \column{0.33\textwidth}
+            Enumerations:
+            \begin{enumerate}
+                \item First
+                \item Second
+                \begin{enumerate}
+                    \item Sub-first
+                    \item Sub-second
+                \end{enumerate}
+                \item Third
+            \end{enumerate}
+
+        \column{0.33\textwidth}
+            Descriptions:
+            \begin{description}
+                \item[First] Yes.
+                \item[Second] No.
+            \end{description}
+    \end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[focus]
+    Thanks for using \textbf{Focus}!
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     CLOSING/SUPPLEMENTARY SLIDES
+%----------------------------------------------------------------------------------------
+
+\appendix
+
+\begin{frame}{References}
+    \nocite{*} % Display all references regardless of if they were cited
+    \bibliography{references.bib}
+    \bibliographystyle{plain}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Backup Slide}
+    This is a backup slide, useful to include additional materials to answer questions from the audience.
+    \vfill
+    The package \texttt{appendixnumberbeamer} is used to refrain from numbering appendix slides.
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+
+\end{document}

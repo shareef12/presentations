@@ -48,15 +48,10 @@
 %----------------------------------------------------------------------------------------
 
 \title{Introduction to Clang/LLVM}
-
 %\subtitle{Subtitle}
-
 \author{Christian Sharpsten}
-
-\titlegraphic{\includegraphics[scale=0.6]{images/llvm_logo_derivative.png}} % Optional title page image, comment this line to remove it
-
-\institute{\todo{\\ Institute Name \\ Institute Address}}
-
+\titlegraphic{\includegraphics[scale=0.6]{images/llvm_logo_derivative.png}}
+%\institute{\todo{\\ Institute Name \\ Institute Address}}
 \date{01 NOV 2019}
 
 %------------------------------------------------
@@ -66,14 +61,28 @@
 %------------------------------------------------
 
 \begin{frame}
-    \maketitle % Automatically created using the information in the commands above
+    \maketitle
 \end{frame}
 
 \begin{frame}{Outline}
     \begin{itemize}
         \item Background
+        \begin{itemize}
+            \item About LLVM
+            \item General Compilation Process
+        \end{itemize}
+        \vspace{1ex}
+
         \item LLVM Compilation Process
+        \vspace{1ex}
+
         \item Writing an Optimization Pass
+        \begin{itemize}
+            \item Building LLVM
+            \item A Simple Pass
+            \item Taint Tracing to Detect Vulnerable memcpys
+            \item Control-Flow Obfuscation
+        \end{itemize}
     \end{itemize}
 \end{frame}
 
@@ -85,48 +94,64 @@
 
 %------------------------------------------------
 
-\begin{frame}{What is LLVM?}
-    This is a simple slide.
-    Keystone/Capstone/McSema/Other tools
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Why LLVM?}
-
-\end{frame}
-
-%------------------------------------------------
-
 \begin{frame}{General Compilation Process}
 
 \end{frame}
 
-%------------------------------------------------
-
 \begin{frame}{General Compilation Process (Lexing/Parsing)}
-    This slide is not numbered and is citing reference \cite{knuth74}.
-    SSA/AST
+SSA/AST
 \end{frame}
-
-%------------------------------------------------
 
 \begin{frame}{General Compilation Process (Code Generation)}
-    This slide is not numbered and is citing reference \cite{knuth74}.
-    Three-address code
+Three-address code
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Typesetting and Math}
-    The packages \texttt{inputenc} and \texttt{FiraSans}\footnote{\url{https://fonts.google.com/specimen/Fira+Sans}}\textsuperscript{,}\footnote{\url{http://mozilla.github.io/Fira/}} are used to properly set the main fonts.
-    \vfill
-    This theme provides styling commands to typeset \emph{emphasized}, \alert{alerted}, \textbf{bold}, \textcolor{example}{example text}, \dots
-    \vfill
-    \texttt{FiraSans} also provides support for mathematical symbols:
-    \begin{equation*}
-        e^{i\pi} + 1 = 0.
-    \end{equation*}
+\begin{frame}{What is LLVM?}
+    LLVM is a ``collection of modular and reusable compiler and toolchain technologies.'' \cite{llvm_org}
+    \vspace{1em}
+
+    LLVM is composed of multiple sub-projects including:
+    {\footnotesize
+    \begin{enumerate}
+        \item \textbf{LLVM Core} - A set of libraries implementing an optimizer and code generators for common CPUs
+        % AArch64, AMDGPU, ARM, BPF, Hexagon, Mips, MSP430, NVPTX, PowerPC, Sparc, SystemZ, X86, XCore
+        \item \textbf{Clang} - A front-end compiler
+        \item \textbf{LLDB} - A native debugger
+        \item \textbf{libc++} - A C++14 compliant STL
+        \item \textbf{compiler-rt} - Compiler run-time libraries (intrinsics, ASAN, TSAN, MSAN, etc.)
+        % ASAN - Detect OOB accesses, UAF, double free, etc.
+        % TSAN - Detect race conditions (experimental)
+        % MSAN - Detect uninitialized reads
+        \item \textbf{klee} - A symbolic executor
+        \item \textbf{LLD} - A drop-in replacement for system linkers such as \texttt{ld}
+    \end{enumerate}
+    }
+\end{frame}
+
+\begin{frame}{Why LLVM?}
+    Composable
+
+    Easy to hack on
+
+    LLVM JIT
+
+    Cross-compiler by default (can build in all backends at once instead of single builds like gcc)
+
+    Keystone/Capstone/McSema/Other tools
+\end{frame}
+
+\begin{frame}{LLVM Core Tools}
+    opt
+
+    llvm-dis
+
+    llvm-as
+
+    llvm-mc
+
+    lto library?
 \end{frame}
 
 %----------------------------------------------------------------------------------------
@@ -228,30 +253,97 @@ Arch-specific optimizations?
 %------------------------------------------------
 
 \begin{frame}{Building LLVM}
-LLVM can take a while to compile...
+    LLVM can take a while to compile...
 
     \begin{table}
-        \centering % Centre the table on the slide
-        \begin{tabular}{l c c c c}
+        \footnotesize
+        \centering
+        \begin{tabular}{l c c c | c c}
             \toprule
-            Generator & Build Type & Sub-Projects & Targets & Time (m) \\
+            Generator & Build Type & Sub-Projects & Targets & Time (m) & Size (GB) \\
             \toprule
-            \textbf{Ninja} & \textbf{Debug} & \textbf{Clang} & \textbf{X86} & \textbf{120.15} \\
-            Ninja & Release & Clang & X86 & 0.00 \\
-            Ninja & Debug & Clang & All & 0.00 \\
-            Ninja & Release & Clang & All & 0.00 \\
-            Make & Debug & Clang & X86 & 0.00 \\
-            Make (-j12) & Debug & Clang & X86 & 0.00 \\
+            \textbf{Ninja} & \textbf{Debug} & \textbf{Clang} & \textbf{X86} & \textbf{120.15} & \textbf{44.0} \\
+            Ninja      & Release & Clang & X86 & 75.03  & 1.7  \\
+            Ninja      & Debug   & Clang & All & 205.65 & 59.5 \\
+            Ninja      & Release & Clang & All & 106.33 & 2.5  \\
+            Make       & Release & Clang & X86 & 433.30 & 1.8  \\
+            Make (-j8) & Release & Clang & X86 & 77.13  & 1.7  \\
             \bottomrule
         \end{tabular}
-        \caption{LLVM Compile Time Benchmarks (6-core, 16GB RAM Ubunut 18.04 VM)}
+        \caption{\footnotesize LLVM Compile Time Benchmarks (Ubuntu 18.04 VM, 6 cores, 16GB RAM)}
     \end{table}
+    % Commands used to benchmark:
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_PROJECTS_TO_BUILD=X86 ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release -DLLVM_PROJECTS_TO_BUILD=X86 ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release ../llvm && time ninja
+    %   cmake -G 'Unix Makefiles' -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD=X86 ../llvm && time make
+    %   cmake -G 'Unix Makefiles' -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD=X86 ../llvm && time make -j8
+
+    Keep in mind that debug artifacts can be quite large as well.
+\end{frame}
+
+\begin{frame}[fragile]{Building LLVM}
+    \begin{alertblock}{High Memory Usage}
+        Watch out for out-of-memory errors when linking. Restart ninja/make with less threads if a link process is killed.
+    \end{alertblock}
+
+    \vspace{-2ex}
+
+    \begin{overprint}
+        \onslide<1>
+        \begin{lstlisting}[basicstyle=\footnotesize,gobble=8]
+        [2361/2742] Linking CXX shared module
+            lib/CheckerOptionHandlingAnalyzerPlugin.so
+        FAILED: lib/CheckerOptionHandlingAnalyzerPlugin.so
+        : && /usr/bin/c++ -fPIC -fPIC ...
+        ...
+        collect2: fatal error: ld terminated with signal 9 [Killed]
+        compilation terminated.
+        ninja: build stopped: subcommand failed.
+        \end{lstlisting}
+
+        \onslide<2>
+        \begin{lstlisting}[basicstyle=\footnotesize,gobble=8]
+        [2359/2742] Linking CXX executable bin/clang-diff
+        FAILED: bin/clang-diff
+        : && /usr/bin/c++  -fPIC -fvisibility-inlines-hidden ...
+        ...
+        /usr/bin/ld: BFD (GNU Binutils for Ubuntu) 2.30 internal error,
+            aborting at ../../bfd/merge.c:908 in
+            _bfd_merged_section_offset
+
+        /usr/bin/ld: Please report this bug.
+
+        collect2: error: ld returned 1 exit status
+        ninja: build stopped: subcommand failed.
+        \end{lstlisting}
+
+        \vspace{-2ex}
+        \rule{3cm}{0.5pt}
+
+        {\footnotesize \url{https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=874674}}
+    \end{overprint}
 \end{frame}
 
 %------------------------------------------------
 
+\begin{frame}[fragile]{LLVM IR}
+    LLVM comes with IR and tablegen syntax highlighting for vim, emacs, and vscode, among other editors.
+
+    \vspace{1cm}
+
+    \begin{lstlisting}[basicstyle=\footnotesize,gobble=4]
+    $ cd ~/.vim
+    $ ln -s ~/llvm-project/llvm/utils/vim/
+            {ftdetect,ftplugin,indent,syntax}
+    \end{lstlisting}
+\end{frame}
+
 \begin{frame}{LLVM IR}
-    Intro to some of the basic instructions
+    use/def
+    Everything is a value and a use
+    CallInst vs InvokeInst (exception handling)
 \end{frame}
 
 \begin{frame}{LLVM IR}
@@ -264,18 +356,26 @@ LLVM can take a while to compile...
 
 %------------------------------------------------
 
-\begin{frame}{Writing a Pass}
-    Skeleton Code for a pass
-    \todo{Module/function/bb pass?}
+\begin{frame}{Writing a Pass (Hello World)}
+    Module vs Function vs BasicBlock pass
+    LoopPass RegionPass and MachineFunctionPass
+\end{frame}
+
+\begin{frame}{Writing a Pass (Hello World)}
+    Hello world pass
 \end{frame}
 
 \begin{frame}{Writing a Pass}
-    Hello world pass
+    Builder API
+\end{frame}
+
+\begin{frame}{Writing a Pass}
+    \todo{Any other interesting things?}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{A More Complex Pass}
+\begin{frame}{Writing a Pass (\_\_\_\_)}
     \todo{Bogus arguments? Constant obfuscation? Detect vuln strcpy? Taint tracing?}
 \end{frame}
 
@@ -341,7 +441,7 @@ LLVM can take a while to compile...
 %------------------------------------------------
 
 \begin{frame}[focus]
-    Thanks for using \textbf{Focus}!
+    Questions?
 \end{frame}
 
 %----------------------------------------------------------------------------------------

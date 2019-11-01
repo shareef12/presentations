@@ -36,12 +36,15 @@
 
 \usepackage{booktabs} % Required for better table rules
 \usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows,automata,positioning,shapes}
 
 \lstset{
+    basicstyle=\footnotesize,
     escapeinside=||
 }
 
-\newcommand{\todo}[1]{\color{red}{TODO: #1}}
+\newcommand{\todo}[1]{\textcolor{red}{TODO: #1}}
 
 %----------------------------------------------------------------------------------------
 %     TITLE SLIDE
@@ -68,8 +71,8 @@
     \begin{itemize}
         \item Background
         \begin{itemize}
-            \item About LLVM
             \item General Compilation Process
+            \item About LLVM
         \end{itemize}
         \vspace{1ex}
 
@@ -90,20 +93,231 @@
 %     SECTION 1
 %----------------------------------------------------------------------------------------
 
-\section{Background} % Section title slide, unnumbered
+\section{Background}
 
 %------------------------------------------------
 
 \begin{frame}{General Compilation Process}
+    \begin{overprint}
+        \onslide<1>
+        \centering
+        \includegraphics[scale=0.4]{images/high_level_compilation.png}
 
+        \onslide<2>
+        \centering
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/high_level_compilation.png}};
+            \node at(a.center)[draw, red,line width=2pt,ellipse,minimum width=3cm,minimum height=0.7cm,xshift=-0.2cm,yshift=1.15cm]{};
+        \end{tikzpicture}
+    \end{overprint}
 \end{frame}
 
-\begin{frame}{General Compilation Process (Lexing/Parsing)}
-SSA/AST
+\begin{frame}{General Compilation Process}
+    \centering
+    \includegraphics[scale=0.325]{images/low_level_compilation.jpg}
 \end{frame}
 
-\begin{frame}{General Compilation Process (Code Generation)}
-Three-address code
+\begin{frame}[fragile]{General Compilation Process (Lexing)}
+    \begin{columns}[T,onlytextwidth]
+        \column{0.8\textwidth}
+            Convert a stream of characters into a stream of tokens that can be described by a regex.
+
+            \vspace{1ex}
+            \begin{lstlisting}[gobble=12]
+            int main() {
+                return 0;
+            }
+            \end{lstlisting}
+
+%            \vspace{1ex}
+            \begin{lstlisting}[gobble=12]
+            TOK_KEYWORD          "int"       1
+            TOK_IDENTIFIER       "main"      1
+            TOK_L_PAREN          "("         1
+            TOK_R_PAREN          ")"         1
+            TOK_L_BRACE          "{"         1
+            TOK_KEYWORD          "return"    2
+            TOK_NUMERIC_CONSTANT "0"         2
+            TOK_SEMI             ";"         2
+            TOK_R_BRACE          "}"         3
+            \end{lstlisting}
+
+        \column{0.2\textwidth}
+            \begin{tikzpicture}
+                \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+                \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=3cm]{};
+            \end{tikzpicture}
+    \end{columns}
+    {\footnotesize \url{llvm-project/clang/include/clang/Basic/TokenKinds.def}}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Lexing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            Since each token type can be represented as a regex, we can generate a DFA that does the parsing for us. This allows to lex in one pass.
+
+            \todo{picture of DFA}
+
+            \onslide<2>
+            In fact, there are tools that do this! Flex is a common tool to do this.
+
+            \begin{lstlisting}[gobble=12,escapeinside=~]
+            DIGIT   [0-9]
+            ID      [_a-zA-Z][_a-zA-Z0-9]*
+
+            %%
+            {DIGIT}+  {
+                      printf("Number: %d\n", atoi(yytext));
+                      }
+            {ID}      {
+                      printf("Identifier: %s\n", yytext);
+                      }
+            int|print {
+                      printf("Keyword: %s\n", yytext);
+                      }
+            %%
+            \end{lstlisting}
+        \end{overprint}
+
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=3cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Parsing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            \begin{itemize}
+                \item Parsing is the process of building a Parse Tree from the token stream.
+                \item The grammar of the language is normally defined by a series of production rules.
+            \end{itemize}
+
+            \hspace*{2cm}$EXPR \rightarrow EXPR + TERM$ \\
+            \hspace*{2cm}$EXPR \rightarrow EXPR - TERM$ \\
+            \hspace*{2cm}$EXPR \rightarrow TERM$ \\
+            \hspace*{2cm}$TERM \rightarrow 0$ \\
+            \hspace*{2cm}$TERM \rightarrow 1$ \\
+            \hspace*{2cm}$TERM \rightarrow ...$ \\
+            \hspace*{2cm}$TERM \rightarrow 9$ \\
+
+            If at any point no production is available, we have encountered a parse error.
+            \onslide<2>
+            Let's build the parse tree for a simple statement.
+            \begin{lstlisting}
+            a = (5 + 4) - 1
+            \end{lstlisting}
+
+            \todo{Parse tree for the above code}
+
+            You can use bison to generate a parser for you!
+        \end{overprint}
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=2cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Parsing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            \begin{itemize}
+                \item We can then process the parse tree to remove redundant information and perform semantic analysis, like type checking.
+                \item This is often where type coercions are introduced.
+                \item This phase produces the Abstract Syntax Tree (AST).
+            \end{itemize}
+
+            \onslide<2>
+            Continuing the earlier example...
+            \begin{lstlisting}
+            a = (5 + 4) - 1
+            \end{lstlisting}
+
+            \todo{Picture of AST for above statement}
+        \end{overprint}
+
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=1cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (IR Generation)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        Many compilers generate IR that is in Static Single Assignment (SSA) form - Each variable is assigned exactly once, and every variable is defined before it is used.
+
+        \vspace{1ex}
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa1.png}
+        \endminipage\hfill
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa2.png}
+        \endminipage\hfill
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa3.png}
+        \endminipage\hfill
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Optimization)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        The compiler will run a number of optimization passes. A few of the common ones are listed here.
+        \begin{itemize}
+            \item Strength Reduction
+            \item Constant Propagation
+            \item Dead Code Elimination
+            \item Loop Invariant Code Motion (Hoisting and Sinking)
+            \item Scalar Replacement of Aggregates \& mem2reg
+        \end{itemize}
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-0.95cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Code Generation)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        During this phase, the compiler will generate assembly code for the given target.
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-1.925cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Optimization)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        Depending on how the backend code generator is implemented, the compiler may apply target-specific optimizations.
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-2.9cm]{};
+        \end{tikzpicture}
+\end{columns}
 \end{frame}
 
 %------------------------------------------------
@@ -131,27 +345,33 @@ Three-address code
 \end{frame}
 
 \begin{frame}{Why LLVM?}
-    Composable
+    Why is LLVM interesting?
+    \begin{itemize}
+        \item Modular
+        \item Easy to hack on
+        \item It has a JIT Engine
+        \item Can cross-compile for multiple architectures with one build
+    \end{itemize}
 
-    Easy to hack on
-
-    LLVM JIT
-
-    Cross-compiler by default (can build in all backends at once instead of single builds like gcc)
-
-    Keystone/Capstone/McSema/Other tools
+    \vspace{1cm}
+    LLVM has been used in a number of open source tools:
+    \begin{itemize}
+        \item Keystone
+        \item Capstone
+        \item McSema
+    \end{itemize}
 \end{frame}
 
 \begin{frame}{LLVM Core Tools}
-    opt
+    \textbf{LLVM Core} includes a number of tools:
 
-    llvm-dis
+    \todo{flow chart of tools}
 
-    llvm-as
+    C Source -> Clang -> LLVM bc -> opt -> LLVM bc -> llc -> .o native code
 
-    llvm-mc
+    LLVM IR -> llvm-as -> LLVM bc
 
-    lto library?
+    LLVM bc -> llvm-dis -> LLVM IR
 \end{frame}
 
 %----------------------------------------------------------------------------------------
@@ -162,47 +382,90 @@ Three-address code
 
 %------------------------------------------------
 
-\begin{frame}{LLVM Sub-Projects}
+\begin{frame}[fragile]{Clang: Pre-processing, Lexing, and Parsing}
+    \begin{lstlisting}[gobble=4]
+    int main(void) {
+        int a = 5 + 2;
+        return a;
+    }
+    \end{lstlisting}
+
+    \begin{lstlisting}[gobble=4,escapeinside=~]
+    $ clang -Xclang -ast-dump test.c
+    TranslationUnitDecl <<invalid sloc>> <invalid sloc>
+    |-...
+    |-...
+    `-FunctionDecl <test.c:1:1, line:4:1> line:1:5 main 'int (void)'
+      `-CompoundStmt <col:16, line:4:1>
+        |-DeclStmt <line:2:5, col:18>
+        | `-VarDecl <col:5, col:17> col:9 used a 'int' cinit
+        |   `-BinaryOperator <col:13, col:17> 'int' '+'
+        |     |-IntegerLiteral <col:13> 'int' 5
+        |     `-IntegerLiteral <col:17> 'int' 2
+        `-ReturnStmt <line:3:5, col:12>
+          `-ImplicitCastExpr <col:12> 'int' <LValueToRValue>
+            `-DeclRefExpr <col:12> 'int' lvalue Var 'a' 'int'
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Clang: IR Code Generation}
+    Use the \texttt{-emit-llvm} option to enable bitcode generation.
+
+    \begin{lstlisting}[gobble=4]
+    $ clang -c -emit-llvm test.c -o test.bc
+    $ llvm-dis < test.bc
+    ; ModuleID = '<stdin>'
+    source_filename = "test.c"
+    target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
+    target triple = "x86_64-unknown-linux-gnu"
+
+    ; Function Attrs: noinline nounwind optnone uwtable
+    define dso_local i32 @main() #0 {
+    entry:
+    %retval = alloca i32, align 4
+    %a = alloca i32, align 4
+    store i32 0, i32* %retval, align 4
+    store i32 7, i32* %a, align 4
+    %0 = load i32, i32* %a, align 4
+    ret i32 %0
+    }
+    ...
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Clang: IR Code Generation}
+    The data layout string describes how data is to be laid out in memory. Elements are separated by the minus sign.
+
+    \vspace{1em}
+    \footnotesize
+    \texttt{target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"}
+
+    \vspace{1ex}
+    \begin{tabular}{l | l c}
+        \toprule
+        Spec        & Description & Value \\
+        \toprule
+        e           & Endianness & little-endian \\
+        m:e         & IR Name Mangling Type & ELF mangling \\
+        i64:64      & Alignment for 64-bit integers (bits) & 64 \\
+        f80:128     & Alignment for 80-bit floats (bits)    & 128 \\
+        n8:16:32:64 & Set of native integer widths for the CPU (bits) & 8, 16, 32, 64 \\
+        S128        & Stack Alignment (bits) & 128 \\
+        \bottomrule
+    \end{tabular}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{LLVM Tools}
-General overview
-List of llvm tools and how they align with the compilation process
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Clang: Pre-Processing}
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Clang: Lexing}
-DFA
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Clang: Parsing}
-AST
-Bitcode generation
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Opt: Optimization}
-Bitcode parsing
+\begin{frame}{opt: Optimization}
 How to view passes?
 How to run one pass?
-Sampling of some important ones (SROA, DCE, etc)
 Module/Function/BB passes
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Llc: Code Generation}
+\begin{frame}{llc: Code Generation}
 Tablegen
 DAG and Legalization
 Register allocation
@@ -292,7 +555,7 @@ Arch-specific optimizations?
 
     \begin{overprint}
         \onslide<1>
-        \begin{lstlisting}[basicstyle=\footnotesize,gobble=8]
+        \begin{lstlisting}[gobble=8]
         [2361/2742] Linking CXX shared module
             lib/CheckerOptionHandlingAnalyzerPlugin.so
         FAILED: lib/CheckerOptionHandlingAnalyzerPlugin.so
@@ -304,7 +567,7 @@ Arch-specific optimizations?
         \end{lstlisting}
 
         \onslide<2>
-        \begin{lstlisting}[basicstyle=\footnotesize,gobble=8]
+        \begin{lstlisting}[gobble=8]
         [2359/2742] Linking CXX executable bin/clang-diff
         FAILED: bin/clang-diff
         : && /usr/bin/c++  -fPIC -fvisibility-inlines-hidden ...
@@ -333,7 +596,7 @@ Arch-specific optimizations?
 
     \vspace{1cm}
 
-    \begin{lstlisting}[basicstyle=\footnotesize,gobble=4]
+    \begin{lstlisting}[gobble=4]
     $ cd ~/.vim
     $ ln -s ~/llvm-project/llvm/utils/vim/
             {ftdetect,ftplugin,indent,syntax}
@@ -462,6 +725,8 @@ Arch-specific optimizations?
     This is a backup slide, useful to include additional materials to answer questions from the audience.
     \vfill
     The package \texttt{appendixnumberbeamer} is used to refrain from numbering appendix slides.
+
+    \todo{LTO?}
 \end{frame}
 
 %----------------------------------------------------------------------------------------

@@ -1,12 +1,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Focus Beamer Presentation
-% LaTeX Template
-% Version 1.0 (8/8/18)
+% Introduction to Clang/LLVM
+% Version 1.0 (2019-11-01)
+% Author: Christian Sharpsten
 %
 % This template has been downloaded from:
 % http://www.LaTeXTemplates.com
 %
-% Original author:
+% Template author:
 % Pasquale Africa (https://github.com/elauksap/focus-beamertheme) with modifications by
 % Vel (vel@LaTeXTemplates.com)
 %
@@ -37,7 +37,7 @@
 \usepackage{booktabs} % Required for better table rules
 \usepackage{listings}
 \usepackage{tikz}
-\usetikzlibrary{arrows,automata,positioning,shapes}
+\usetikzlibrary{positioning,shapes}
 
 \lstset{
     basicstyle=\footnotesize,
@@ -83,7 +83,7 @@
         \begin{itemize}
             \item Building LLVM
             \item A Simple Pass
-            \item Taint Tracing to Detect Vulnerable memcpys
+            %\item Taint Tracing to Detect Vulnerable memcpys
             \item Control-Flow Obfuscation
         \end{itemize}
     \end{itemize}
@@ -120,7 +120,7 @@
 \begin{frame}[fragile]{General Compilation Process (Lexing)}
     \begin{columns}[T,onlytextwidth]
         \column{0.8\textwidth}
-            Convert a stream of characters into a stream of tokens that can be described by a regex.
+            Convert a stream of characters into a stream of tokens. A lexer recognizes a regular language.
 
             \vspace{1ex}
             \begin{lstlisting}[gobble=12]
@@ -156,12 +156,13 @@
     \column{0.8\textwidth}
         \begin{overprint}
             \onslide<1>
-            Since each token type can be represented as a regex, we can generate a DFA that does the parsing for us. This allows to lex in one pass.
+            Since the lexer recognizes a regular language, we can model the lexer as a Deterministic Finite Automata (DFA). This allows to lex in one pass.
 
-            \todo{picture of DFA}
+            \centering
+            \includegraphics[scale=0.4]{images/lexer_dfa.png}
 
             \onslide<2>
-            In fact, there are tools that do this! Flex is a common tool to do this.
+            In fact, there are tools that do this, such as Flex.
 
             \begin{lstlisting}[gobble=12,escapeinside=~]
             DIGIT   [0-9]
@@ -208,15 +209,32 @@
             \hspace*{2cm}$TERM \rightarrow 9$ \\
 
             If at any point no production is available, we have encountered a parse error.
+
             \onslide<2>
-            Let's build the parse tree for a simple statement.
-            \begin{lstlisting}
-            a = (5 + 4) - 1
+            After removing left-recursion, we can use this equivalent grammar instead for top-down parsing:
+
+            \vspace{1em}
+            \begin{lstlisting}[escapeinside=~,gobble=4]
+            EXPR -> TERM REST
+            REST -> + TERM REST
+                  | - TERM REST
+                  | e
+            TERM -> 0
+                  | 1
+                    ...
+                  | 9
             \end{lstlisting}
 
-            \todo{Parse tree for the above code}
+            \onslide<3>
+            Let's build the parse tree for a simple statement.
+            \begin{lstlisting}
+            9 - 5 + 2
+            \end{lstlisting}
 
-            You can use bison to generate a parser for you!
+            \includegraphics[width=\textwidth]{images/parse_tree.png}
+
+            \vspace{1em}
+            You can use bison to generate a parser for you.
         \end{overprint}
     \column{0.2\textwidth}
         \begin{tikzpicture}
@@ -240,10 +258,10 @@
             \onslide<2>
             Continuing the earlier example...
             \begin{lstlisting}
-            a = (5 + 4) - 1
+            9 - 5 + 2
             \end{lstlisting}
 
-            \todo{Picture of AST for above statement}
+            \includegraphics[width=\textwidth]{images/ast.png}
         \end{overprint}
 
     \column{0.2\textwidth}
@@ -365,13 +383,13 @@
 \begin{frame}{LLVM Core Tools}
     \textbf{LLVM Core} includes a number of tools:
 
-    \todo{flow chart of tools}
+    \centering
+    \vspace{1em}
+    \includegraphics[width=\textwidth]{images/llvm_tools1.png}
 
-    C Source -> Clang -> LLVM bc -> opt -> LLVM bc -> llc -> .o native code
-
-    LLVM IR -> llvm-as -> LLVM bc
-
-    LLVM bc -> llvm-dis -> LLVM IR
+    \pause
+    \vspace{1em}
+    \includegraphics[scale=0.7]{images/llvm_tools2.png}
 \end{frame}
 
 %----------------------------------------------------------------------------------------
@@ -458,18 +476,53 @@
 %------------------------------------------------
 
 \begin{frame}{opt: Optimization}
-How to view passes?
-How to run one pass?
-Module/Function/BB passes
+    The \texttt{opt} tool runs target-independent optimizations on LLVM bitcode.
+
+    \vspace{1ex}
+    There are different types of passes, each registered with a pass manager. A pass can be an analysis or a modification pass.
+    \begin{itemize}
+        \item ModulePass - Inter-procedural optimizations
+        \item FunctionPass - Intra-procedural optimizations
+        \item BasicBlockPass - Useful for local and ``peephole'' optimizations
+        \item CallGraphSCCPass, LoopPass, RegionPass - Specialized pass types
+    \end{itemize}
+
+    The PassManager is responsible for scheduling passes in an order that makes sense (analysis dependencies, SROA before DCE, etc.)
+\end{frame}
+
+\begin{frame}[fragile]{opt: Optimization}
+    You can view the structure of passes by using the \texttt{--debug-pass=Structure} option.
+
+    \begin{lstlisting}[gobble=4]
+    $ opt -O1 --debug-pass=Structure test.bc > test_opt.bc
+    Pass Arguments:  -verify -simplifycfg -domtree -sroa ...
+      FunctionPass Manager
+        Module Verifier
+        Simplify the CFG
+        Dominator Tree Construction
+        SROA
+    Pass Arguments:  -simplifycfg -verify -write-bitcode ...
+      ModulePass Manager
+        Dead Argument Elimination
+        FunctionPass Manager
+          Dominator Tree Construction
+          Simplify the CFG
+    ...
+    ...
+    \end{lstlisting}
 \end{frame}
 
 %------------------------------------------------
 
 \begin{frame}{llc: Code Generation}
-Tablegen
-DAG and Legalization
-Register allocation
-Arch-specific optimizations?
+    \includegraphics[width=\textwidth]{images/llvm_codegen.png}
+\end{frame}
+
+\begin{frame}{llc: Code Generation}
+    LLVM uses a tool called \texttt{tblgen} to translate target description (.td) files into C++ code that implements part of the target code generator.
+
+    \vspace{1em}
+    \includegraphics[width=\textwidth]{images/llvm_tblgen.png}
 \end{frame}
 
 %----------------------------------------------------------------------------------------
@@ -509,7 +562,7 @@ Arch-specific optimizations?
         -DLLVM_TARGETS_TO_BUILD=X86
         ../llvm |\pause|
     $ time ninja
-
+    $ sudo ninja install
     \end{lstlisting}
 \end{frame}
 
@@ -592,7 +645,7 @@ Arch-specific optimizations?
 %------------------------------------------------
 
 \begin{frame}[fragile]{LLVM IR}
-    LLVM comes with IR and tablegen syntax highlighting for vim, emacs, and vscode, among other editors.
+    LLVM comes with IR and tblgen syntax highlighting for vim, emacs, and vscode, among other editors.
 
     \vspace{1cm}
 
@@ -604,101 +657,150 @@ Arch-specific optimizations?
 \end{frame}
 
 \begin{frame}{LLVM IR}
-    use/def
-    Everything is a value and a use
-    CallInst vs InvokeInst (exception handling)
+    \centering\huge\bfseries
+    Demo
 \end{frame}
 
 \begin{frame}{LLVM IR}
-    C code for a short sample
+    LLVM BinaryOperator class:
+    \includegraphics[width=\textwidth]{images/llvm_binop.png}
+
+    LLVM CallInst class:
+    \includegraphics[width=\textwidth]{images/llvm_callinst.png}
+
+    The llvm::Value, llvm::User, and llvm::Use classes implement use-def chains. \\
+    \footnotesize
+    llvm::User provides an op\_iterator that returns llvm::Use * for operands. \\
+    llvm::Value provides a use\_iterator that returns uses of this value. \\
 \end{frame}
 
-\begin{frame}{LLVM IR}
-    IR for the same sample
+\begin{frame}[fragile]{LLVM IR}
+    A \emph{def-use} chain is the list of all Users of a particular Value.
+    \begin{lstlisting}[gobble=4]
+    Function *F = ...;
+    for (User *U : F->users()) {
+        if (Instruction *Inst = dyn_cast<Instruction>(U)) {
+            errs() << "F is used in instruction:\n";
+            errs() << *Inst << "\n";
+        }
+    \end{lstlisting}
+
+    \vspace{1em}
+    A \emph{use-def} chain is the list of all Values used by a User.
+    \begin{lstlisting}[gobble=4]
+    Instruction *pi = ...;
+
+    for (Use &U : pi->operands()) {
+        Value *v = U.get();
+        // ...
+    }
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{LLVM IR}
+    \begin{itemize}
+        \item Many classes provide iterators for common collections (BBs in a function, functions in a module)
+        \item LLVM makes extensive use of a custom form of RTTI, similar to C++ \texttt{dynamic\_cast<>}. It provides a number of operators such as ``isa<>'', ``cast<>'', and ``dyn\_cast<>''.
+
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8,escapeinside=~]
+        static bool isLoopInvariant(const Value *V, const Loop *L) {
+            if (isa<Constant>(V) || isa<Argument>(V) || isa<GlobalValue>(V))
+                return true;
+
+            // Otherwise, it must be an instruction...
+            return !L->contains(cast<Instruction>(V)->getParent());
+        }
+        \end{lstlisting}
+
+        \item The Builder API allows you to generate new code during your pass
+        \item Some quirks - In Windows calls that are inside a \_\_try/\_\_except block are emitted as `Invoke' instructions
+    \end{itemize}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Writing a Pass (Hello World)}
-    Module vs Function vs BasicBlock pass
-    LoopPass RegionPass and MachineFunctionPass
-\end{frame}
+\begin{frame}[fragile]{Writing a Pass (ExamplePass)}
+    The LLVM documentation recommends building your pass a shared object, to be loaded by clang or opt.
 
-\begin{frame}{Writing a Pass (Hello World)}
-    Hello world pass
-\end{frame}
+    \begin{overprint}
+        \onslide<1>
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8]
+        $ clang -c -emit-llvm chal.c -o chal.bc
+        $ opt -load /usr/local/lib/LLVMExamplePass.so --example chal.bc > chal_opt.bc
+        Function: decrypt
+        External: rand
+        Function: main
+        External: llvm.memset.p0i8.i64
+        External: srand
+        External: printf
+        External: __isoc99_scanf
+        External: strlen
+        External: memcmp
+        External: puts
+        \end{lstlisting}
 
-\begin{frame}{Writing a Pass}
-    Builder API
-\end{frame}
-
-\begin{frame}{Writing a Pass}
-    \todo{Any other interesting things?}
+        \onslide<2>
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8]
+        $ clang -Xclang -load -Xclang /usr/local/lib/LLVMExamplePass.so chal.c
+        Function: decrypt
+        External: rand
+        Function: main
+        External: llvm.memset.p0i8.i64
+        External: srand
+        External: printf
+        External: __isoc99_scanf
+        External: strlen
+        External: memcmp
+        External: puts
+        \end{lstlisting}
+    \end{overprint}
 \end{frame}
 
 %------------------------------------------------
 
-\begin{frame}{Writing a Pass (\_\_\_\_)}
-    \todo{Bogus arguments? Constant obfuscation? Detect vuln strcpy? Taint tracing?}
+\begin{frame}{Writing a Pass}
+    There are tons of interesting things you can do with a pass.
+    \begin{itemize}
+        \item Obfuscation - bogus arguments, constant obfuscation, control flow obfuscation, string encryption, etc.
+        \item Source and target independent taint tracing to detect vulnerabilities
+        \item Measure statistics about code you compile
+    \end{itemize}
 \end{frame}
 
 %------------------------------------------------
 
 \begin{frame}{ExtractBB Pass}
-    Liveness analysis
+    What if we could obfuscate a program by making control-flow interprocedural?
+
+    \pause
+    \begin{enumerate}
+        \item Conduct a liveness analysis to determine the set of live variables at the entry of each basic block.
+        \pause
+        \item Extract each basic block into a new function.
+        \pause
+        \item Convert branches to calls.
+        \pause
+        \item Fixup operand uses with their new argument Values.
+        \pause
+        \item Remove PhiNodes.
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}{ExtractBB Pass (Liveness Analysis)}
+    \todo{liveness}
+    We know LLVM IR is already in SSA. So we can just follow use-def chain for each inst to get parameters.
+
+    Multiple recursive postorder traversal of the CFG with loop detection
 \end{frame}
 
 \begin{frame}{ExtractBB Pass}
-    Demo with IDA screenshots
+    \todo{summary}
+    Builder API - Line
+    PHI Handling (always first in BB, even though a phi has two uses, we only need one parameter). (line 94 - dyn\_cast, use-def chain following)
 \end{frame}
 
-%------------------------------------------------
-
-\begin{frame}{Columns}
-    \begin{columns}
-        \column{0.5\textwidth}
-            This text appears in the left column and wraps neatly with a margin between columns.
-
-        \column{0.5\textwidth}
-            \includegraphics[width=\linewidth]{Images/placeholder.jpg}
-    \end{columns}
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Lists}
-    \begin{columns}[T, onlytextwidth] % T for top align, onlytextwidth to suppress the margin between columns
-        \column{0.33\textwidth}
-            Items:
-            \begin{itemize}
-                \item Item 1
-                \begin{itemize}
-                    \item Subitem 1.1
-                    \item Subitem 1.2
-                \end{itemize}
-                \item Item 2
-                \item Item 3
-            \end{itemize}
-
-        \column{0.33\textwidth}
-            Enumerations:
-            \begin{enumerate}
-                \item First
-                \item Second
-                \begin{enumerate}
-                    \item Sub-first
-                    \item Sub-second
-                \end{enumerate}
-                \item Third
-            \end{enumerate}
-
-        \column{0.33\textwidth}
-            Descriptions:
-            \begin{description}
-                \item[First] Yes.
-                \item[Second] No.
-            \end{description}
-    \end{columns}
+\begin{frame}{ExtractBB Pass}
+    \todo{Demo with IDA screenshots}
 \end{frame}
 
 %------------------------------------------------
@@ -713,7 +815,7 @@ Arch-specific optimizations?
 
 \appendix
 
-\begin{frame}{References}
+\begin{frame}[allowframebreaks]{References}
     \nocite{*} % Display all references regardless of if they were cited
     \bibliography{references.bib}
     \bibliographystyle{plain}

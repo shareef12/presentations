@@ -1,0 +1,850 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Introduction to Clang/LLVM
+% Version 1.0 (2019-11-01)
+% Author: Christian Sharpsten
+%
+% This template has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% Template author:
+% Pasquale Africa (https://github.com/elauksap/focus-beamertheme) with modifications by
+% Vel (vel@LaTeXTemplates.com)
+%
+% Template license:
+% GNU GPL v3.0 License
+%
+% Important note:
+% The bibliography/references need to be compiled with bibtex.
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%    PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass{beamer}
+
+\usetheme{focus} % Use the Focus theme supplied with the template
+% Add option [numbering=none] to disable the footer progress bar
+% Add option [numbering=fullbar] to show the footer progress bar as always full with a slide count
+
+% Uncomment to enable the ice-blue theme
+%\definecolor{main}{RGB}{92, 138, 168}
+%\definecolor{background}{RGB}{240, 247, 255}
+
+%------------------------------------------------
+
+\usepackage{booktabs} % Required for better table rules
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{positioning,shapes}
+
+\lstset{
+    basicstyle=\footnotesize,
+    escapeinside=||
+}
+
+\newcommand{\todo}[1]{\textcolor{red}{TODO: #1}}
+
+%----------------------------------------------------------------------------------------
+%     TITLE SLIDE
+%----------------------------------------------------------------------------------------
+
+\title{Introduction to Clang/LLVM}
+%\subtitle{Subtitle}
+\author{Christian Sharpsten}
+\titlegraphic{\includegraphics[scale=0.6]{images/llvm_logo_derivative.png}}
+%\institute{\\ Institute Name \\ Institute Address}
+\date{01 NOV 2019}
+
+%------------------------------------------------
+
+\begin{document}
+
+%------------------------------------------------
+
+\begin{frame}
+    \maketitle
+\end{frame}
+
+\begin{frame}{Outline}
+    \begin{itemize}
+        \item Background
+        \begin{itemize}
+            \item General Compilation Process
+            \item About LLVM
+        \end{itemize}
+        \vspace{1ex}
+
+        \item LLVM Compilation Process
+        \vspace{1ex}
+
+        \item Writing an Optimization Pass
+        \begin{itemize}
+            \item Building LLVM
+            \item A Simple Pass
+            %\item Taint Tracing to Detect Vulnerable memcpys
+            \item Control-Flow Obfuscation
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 1
+%----------------------------------------------------------------------------------------
+
+\section{Background}
+
+%------------------------------------------------
+
+\begin{frame}{General Compilation Process}
+    \begin{overprint}
+        \onslide<1>
+        \centering
+        \includegraphics[scale=0.4]{images/high_level_compilation.png}\cite{high_level_compilation}
+
+        \onslide<2>
+        \centering
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/high_level_compilation.png}\cite{high_level_compilation}};
+            \node at(a.center)[draw, red,line width=2pt,ellipse,minimum width=3cm,minimum height=0.7cm,xshift=-0.3cm,yshift=1.15cm]{};
+        \end{tikzpicture}
+    \end{overprint}
+\end{frame}
+
+\begin{frame}{General Compilation Process}
+    \centering
+    \includegraphics[scale=0.325]{images/low_level_compilation.jpg}\cite{low_level_compilation}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Lexing)}
+    \begin{columns}[T,onlytextwidth]
+        \column{0.8\textwidth}
+            Convert a stream of characters into a stream of tokens. A lexer recognizes a regular language.
+
+            \vspace{1ex}
+            \begin{lstlisting}[gobble=12]
+            int main() {
+                return 0;
+            }
+            \end{lstlisting}
+
+            \begin{lstlisting}[gobble=12]
+            TOK_KEYWORD          "int"       1
+            TOK_IDENTIFIER       "main"      1
+            TOK_L_PAREN          "("         1
+            TOK_R_PAREN          ")"         1
+            TOK_L_BRACE          "{"         1
+            TOK_KEYWORD          "return"    2
+            TOK_NUMERIC_CONSTANT "0"         2
+            TOK_SEMI             ";"         2
+            TOK_R_BRACE          "}"         3
+            \end{lstlisting}
+
+        \column{0.2\textwidth}
+            \begin{tikzpicture}
+                \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+                \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=3cm]{};
+            \end{tikzpicture}
+    \end{columns}
+    {\footnotesize \url{llvm-project/clang/include/clang/Basic/TokenKinds.def}}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Lexing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            Since the lexer recognizes a regular language, we can model the lexer as a Deterministic Finite Automata (DFA). This allows to lex in one pass.
+
+            \centering
+            \includegraphics[scale=0.4]{images/lexer_dfa.png}
+
+            \onslide<2>
+            In fact, there are tools that do this, such as Flex.
+
+            \begin{lstlisting}[gobble=12,escapeinside=~]
+            DIGIT   [0-9]
+            ID      [_a-zA-Z][_a-zA-Z0-9]*
+
+            %%
+            {DIGIT}+  {
+                      printf("Number: %d\n", atoi(yytext));
+                      }
+            {ID}      {
+                      printf("Identifier: %s\n", yytext);
+                      }
+            int|print {
+                      printf("Keyword: %s\n", yytext);
+                      }
+            %%
+            \end{lstlisting}
+        \end{overprint}
+
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=3cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Parsing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            \begin{itemize}
+                \item Parsing is the process of building a Parse Tree from the token stream.
+                \item The grammar of the language is normally defined by a series of production rules.
+            \end{itemize}
+
+            \hspace*{2cm}$EXPR \rightarrow EXPR + TERM$ \\
+            \hspace*{2cm}$EXPR \rightarrow EXPR - TERM$ \\
+            \hspace*{2cm}$EXPR \rightarrow TERM$ \\
+            \hspace*{2cm}$TERM \rightarrow 0$ \\
+            \hspace*{2cm}$TERM \rightarrow 1$ \\
+            \hspace*{2cm}$TERM \rightarrow ...$ \\
+            \hspace*{2cm}$TERM \rightarrow 9$ \\
+
+            If at any point no production is available, we have encountered a parse error.
+
+            \onslide<2>
+            After removing left-recursion, we can use this equivalent grammar instead for top-down parsing:
+
+            \vspace{1em}
+            \begin{lstlisting}[escapeinside=~,gobble=4]
+            EXPR -> TERM REST
+            REST -> + TERM REST
+                  | - TERM REST
+                  | e
+            TERM -> 0
+                  | 1
+                    ...
+                  | 9
+            \end{lstlisting}
+
+            \onslide<3>
+            Let's build the parse tree for a simple statement.
+            \begin{lstlisting}
+            9 - 5 + 2
+            \end{lstlisting}
+
+            \includegraphics[width=0.95\textwidth]{images/parse_tree.png}\cite{compilers}
+
+            \vspace{1em}
+            You can use bison to generate a parser for you.
+        \end{overprint}
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=2cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Parsing)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        \begin{overprint}
+            \onslide<1>
+            \begin{itemize}
+                \item We can then process the parse tree to remove redundant information and perform semantic analysis, like type checking.
+                \item This is often where type coercions are introduced.
+                \item This phase produces the Abstract Syntax Tree (AST).
+            \end{itemize}
+
+            \onslide<2>
+            Continuing the earlier example...
+            \begin{lstlisting}
+            9 - 5 + 2
+            \end{lstlisting}
+
+            \includegraphics[width=0.95\textwidth]{images/ast.png}\cite{compilers}
+        \end{overprint}
+
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=1cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (IR Generation)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        Many compilers generate IR that is in Static Single Assignment (SSA) form - Each variable is assigned exactly once, and every variable is defined before it is used.
+
+        \vspace{1ex}
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa1.png}
+        \endminipage\hfill
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa2.png}
+        \endminipage\hfill
+        \minipage{0.32\textwidth}
+            \includegraphics[width=\linewidth]{images/ssa3.png}
+        \endminipage\hfill
+        \cite{ssa}
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Optimization)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        The compiler will run a number of optimization passes. A few of the common ones are listed here.
+        \begin{itemize}
+            \item Strength Reduction
+            \item Constant Propagation
+            \item Dead Code Elimination
+            \item Loop Invariant Code Motion (Hoisting and Sinking)
+            \item Scalar Replacement of Aggregates \& mem2reg
+        \end{itemize}
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-0.95cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Code Generation)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        During this phase, the compiler will generate assembly code for the given target.
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-1.925cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+\begin{frame}[fragile]{General Compilation Process (Optimization)}
+\begin{columns}[T,onlytextwidth]
+    \column{0.8\textwidth}
+        Depending on how the backend code generator is implemented, the compiler may apply target-specific optimizations.
+    \column{0.2\textwidth}
+        \begin{tikzpicture}
+            \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
+            \node at(a.center)[draw, red,line width=1pt,ellipse,minimum width=2.5cm,minimum height=0.6cm,yshift=-2.9cm]{};
+        \end{tikzpicture}
+\end{columns}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{What is LLVM?}
+    LLVM is a ``collection of modular and reusable compiler and toolchain technologies.'' \cite{llvm_org}
+    \vspace{1em}
+
+    LLVM is composed of multiple sub-projects including:
+    {\footnotesize
+    \begin{enumerate}
+        \item \textbf{LLVM Core} - A set of libraries implementing an optimizer and code generators for common CPUs
+        % AArch64, AMDGPU, ARM, BPF, Hexagon, Mips, MSP430, NVPTX, PowerPC, Sparc, SystemZ, X86, XCore
+        \item \textbf{Clang} - A front-end compiler
+        \item \textbf{LLDB} - A native debugger
+        \item \textbf{libc++} - A C++14 compliant STL
+        \item \textbf{compiler-rt} - Compiler run-time libraries (intrinsics, ASAN, TSAN, MSAN, etc.)
+        % ASAN - Detect OOB accesses, UAF, double free, etc.
+        % TSAN - Detect race conditions (experimental)
+        % MSAN - Detect uninitialized reads
+        \item \textbf{klee} - A symbolic executor
+        \item \textbf{LLD} - A drop-in replacement for system linkers such as \texttt{ld}
+    \end{enumerate}
+    }
+\end{frame}
+
+\begin{frame}{Why LLVM?}
+    Why is LLVM interesting?
+    \begin{itemize}
+        \item Modular
+        \item Easy to hack on
+        \item It has a JIT Engine
+        \item Can cross-compile for multiple architectures with one build
+    \end{itemize}
+
+    \vspace{1cm}
+    LLVM has been used in a number of open source tools:
+    \begin{itemize}
+        \item Keystone
+        \item Capstone
+        \item McSema
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{LLVM Core Tools}
+    \textbf{LLVM Core} includes a number of tools:
+
+    \centering
+    \vspace{1em}
+    \includegraphics[width=\textwidth]{images/llvm_tools1.png}
+
+    \pause
+    \vspace{1em}
+    \includegraphics[scale=0.7]{images/llvm_tools2.png}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 2
+%----------------------------------------------------------------------------------------
+
+\section{LLVM Compilation Process}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Clang: Pre-processing, Lexing, and Parsing}
+    \begin{lstlisting}[gobble=4]
+    int main(void) {
+        int a = 5 + 2;
+        return a;
+    }
+    \end{lstlisting}
+
+    \begin{lstlisting}[gobble=4,escapeinside=~]
+    $ clang -Xclang -ast-dump test.c
+    TranslationUnitDecl <<invalid sloc>> <invalid sloc>
+    |-...
+    |-...
+    `-FunctionDecl <test.c:1:1, line:4:1> line:1:5 main 'int (void)'
+      `-CompoundStmt <col:16, line:4:1>
+        |-DeclStmt <line:2:5, col:18>
+        | `-VarDecl <col:5, col:17> col:9 used a 'int' cinit
+        |   `-BinaryOperator <col:13, col:17> 'int' '+'
+        |     |-IntegerLiteral <col:13> 'int' 5
+        |     `-IntegerLiteral <col:17> 'int' 2
+        `-ReturnStmt <line:3:5, col:12>
+          `-ImplicitCastExpr <col:12> 'int' <LValueToRValue>
+            `-DeclRefExpr <col:12> 'int' lvalue Var 'a' 'int'
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Clang: IR Code Generation}
+    Use the \texttt{-emit-llvm} option to enable bitcode generation.
+
+    \begin{lstlisting}[gobble=4]
+    $ clang -c -emit-llvm test.c -o test.bc
+    $ llvm-dis < test.bc
+    ; ModuleID = '<stdin>'
+    source_filename = "test.c"
+    target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"
+    target triple = "x86_64-unknown-linux-gnu"
+
+    ; Function Attrs: noinline nounwind optnone uwtable
+    define dso_local i32 @main() #0 {
+    entry:
+    %retval = alloca i32, align 4
+    %a = alloca i32, align 4
+    store i32 0, i32* %retval, align 4
+    store i32 7, i32* %a, align 4
+    %0 = load i32, i32* %a, align 4
+    ret i32 %0
+    }
+    ...
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{Clang: IR Code Generation}
+    The data layout string describes how data is to be laid out in memory. Elements are separated by the minus sign.
+
+    \vspace{1em}
+    \footnotesize
+    \texttt{target datalayout = "e-m:e-i64:64-f80:128-n8:16:32:64-S128"}
+
+    \vspace{1ex}
+    \begin{tabular}{l | l c}
+        \toprule
+        Spec        & Description & Value \\
+        \toprule
+        e           & Endianness & little-endian \\
+        m:e         & IR Name Mangling Type & ELF mangling \\
+        i64:64      & Alignment for 64-bit integers (bits) & 64 \\
+        f80:128     & Alignment for 80-bit floats (bits)    & 128 \\
+        n8:16:32:64 & Set of native integer widths for the CPU (bits) & 8, 16, 32, 64 \\
+        S128        & Stack Alignment (bits) & 128 \\
+        \bottomrule
+    \end{tabular}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{opt: Optimization}
+    The \texttt{opt} tool runs target-independent optimizations on LLVM bitcode.
+
+    \vspace{1ex}
+    There are different types of passes, each registered with a pass manager. A pass can be an analysis or a modification pass.
+    \begin{itemize}
+        \item ModulePass - Inter-procedural optimizations
+        \item FunctionPass - Intra-procedural optimizations
+        \item BasicBlockPass - Useful for local and ``peephole'' optimizations
+        \item CallGraphSCCPass, LoopPass, RegionPass - Specialized pass types
+    \end{itemize}
+
+    The PassManager is responsible for scheduling passes in an order that makes sense (analysis dependencies, SROA before DCE, etc.)
+\end{frame}
+
+\begin{frame}[fragile]{opt: Optimization}
+    You can view the structure of passes by using the \texttt{--debug-pass=Structure} option.
+
+    \begin{lstlisting}[gobble=4]
+    $ opt -O1 --debug-pass=Structure test.bc > test_opt.bc
+    Pass Arguments:  -verify -simplifycfg -domtree -sroa ...
+      FunctionPass Manager
+        Module Verifier
+        Simplify the CFG
+        Dominator Tree Construction
+        SROA
+    Pass Arguments:  -simplifycfg -verify -write-bitcode ...
+      ModulePass Manager
+        Dead Argument Elimination
+        FunctionPass Manager
+          Dominator Tree Construction
+          Simplify the CFG
+    ...
+    ...
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{llc: Code Generation}
+    \includegraphics[width=\textwidth]{images/llvm_codegen.png}
+\end{frame}
+
+\begin{frame}{llc: Code Generation}
+    LLVM uses a tool called \texttt{tblgen} to translate target description (.td) files into C++ code that implements part of the target code generator.
+
+    \vspace{1em}
+    \includegraphics[width=\textwidth]{images/llvm_tblgen.png}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     SECTION 3
+%----------------------------------------------------------------------------------------
+
+\section{Writing an Optimization Pass}
+
+%------------------------------------------------
+
+\begin{frame}{Building LLVM}
+    \begin{itemize}
+        \item LLVM switched from svn to a single git monorepo as of 21 OCT 2019 (exciting!)
+        \item LLVM uses CMake. You can control the build in a number of ways:
+        \begin{itemize}
+            \item Generator (Ninja, Unix Makefiles, VS, Xcode)
+            \item Build type (Debug, Release, RelWithDebInfo, MinSizeRel)
+            \item Enabled sub-projects (test suite, libcxx, lldb, lld, etc.)
+            \item Backend targets (X86, Mips, PowerPC, etc.)
+        \end{itemize}
+        \item Depending on which features you enable, LLVM can take a long time to compile.
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Building LLVM}
+    For this exercise, we only need to build Clang and the X86 backend.
+
+    \begin{lstlisting}[gobble=4]
+    $ git clone https://github.com/llvm/llvm-project.git |\pause|
+    $ cd llvm-project && git checkout llvmorg-9.0.0 |\pause|
+    $ mkdir build && cd build |\pause|
+    $ cmake -G Ninja                    \
+        -DLLVM_ENABLE_PROJECTS='clang'  \
+        -DCMAKE_BUILD_TYPE=Debug        \
+        -DLLVM_TARGETS_TO_BUILD=X86
+        ../llvm |\pause|
+    $ time ninja
+    $ sudo ninja install
+    \end{lstlisting}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Building LLVM}
+    LLVM can take a while to compile...
+
+    \begin{table}
+        \footnotesize
+        \centering
+        \begin{tabular}{l c c c | c c}
+            \toprule
+            Generator & Build Type & Sub-Projects & Targets & Time (m) & Size (GB) \\
+            \toprule
+            \textbf{Ninja} & \textbf{Debug} & \textbf{Clang} & \textbf{X86} & \textbf{120.15} & \textbf{44.0} \\
+            Ninja      & Release & Clang & X86 & 75.03  & 1.7  \\
+            Ninja      & Debug   & Clang & All & 205.65 & 59.5 \\
+            Ninja      & Release & Clang & All & 106.33 & 2.5  \\
+            Make       & Release & Clang & X86 & 433.30 & 1.8  \\
+            Make (-j8) & Release & Clang & X86 & 77.13  & 1.7  \\
+            \bottomrule
+        \end{tabular}
+        \caption{\footnotesize LLVM Compile Time Benchmarks (Ubuntu 18.04 VM, 6 cores, 16GB RAM)}
+    \end{table}
+    % Commands used to benchmark:
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_PROJECTS_TO_BUILD=X86 ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release -DLLVM_PROJECTS_TO_BUILD=X86 ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug ../llvm && time ninja
+    %   cmake -G Ninja -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Release ../llvm && time ninja
+    %   cmake -G 'Unix Makefiles' -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD=X86 ../llvm && time make
+    %   cmake -G 'Unix Makefiles' -DLLVM_ENABLE_PROJECTS='clang' -DCMAKE_BUILD_TYPE=Debug -DLLVM_TARGETS_TO_BUILD=X86 ../llvm && time make -j8
+
+    Keep in mind that debug artifacts can be quite large as well.
+\end{frame}
+
+\begin{frame}[fragile]{Building LLVM}
+    \begin{alertblock}{High Memory Usage}
+        Watch out for out-of-memory errors when linking. Restart ninja/make with less threads if a link process is killed.
+    \end{alertblock}
+
+    \vspace{-2ex}
+
+    \begin{overprint}
+        \onslide<1>
+        \begin{lstlisting}[gobble=8]
+        [2361/2742] Linking CXX shared module
+            lib/CheckerOptionHandlingAnalyzerPlugin.so
+        FAILED: lib/CheckerOptionHandlingAnalyzerPlugin.so
+        : && /usr/bin/c++ -fPIC -fPIC ...
+        ...
+        collect2: fatal error: ld terminated with signal 9 [Killed]
+        compilation terminated.
+        ninja: build stopped: subcommand failed.
+        \end{lstlisting}
+
+        \onslide<2>
+        \begin{lstlisting}[gobble=8]
+        [2359/2742] Linking CXX executable bin/clang-diff
+        FAILED: bin/clang-diff
+        : && /usr/bin/c++  -fPIC -fvisibility-inlines-hidden ...
+        ...
+        /usr/bin/ld: BFD (GNU Binutils for Ubuntu) 2.30 internal error,
+            aborting at ../../bfd/merge.c:908 in
+            _bfd_merged_section_offset
+
+        /usr/bin/ld: Please report this bug.
+
+        collect2: error: ld returned 1 exit status
+        ninja: build stopped: subcommand failed.
+        \end{lstlisting}
+
+        \vspace{-2ex}
+        \rule{3cm}{0.5pt}
+
+        {\footnotesize \url{https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=874674}}
+    \end{overprint}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{LLVM IR}
+    LLVM comes with IR and tblgen syntax highlighting for vim, emacs, and vscode, among other editors.
+
+    \vspace{1cm}
+
+    \begin{lstlisting}[gobble=4]
+    $ cd ~/.vim
+    $ ln -s ~/llvm-project/llvm/utils/vim/
+            {ftdetect,ftplugin,indent,syntax}
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}{LLVM IR}
+    \centering\huge\bfseries
+    Demo
+\end{frame}
+
+\begin{frame}{LLVM IR}
+    LLVM BinaryOperator class:
+    \includegraphics[width=\textwidth]{images/llvm_binop.png}
+
+    LLVM CallInst class:
+    \includegraphics[width=\textwidth]{images/llvm_callinst.png}
+
+    The llvm::Value, llvm::User, and llvm::Use classes implement use-def chains. \\
+    \footnotesize
+    llvm::User provides an op\_iterator that returns llvm::Use * for operands. \\
+    llvm::Value provides a use\_iterator that returns uses of this value. \\
+\end{frame}
+
+\begin{frame}[fragile]{LLVM IR}
+    A \emph{def-use} chain is the list of all Users of a particular Value.
+    \begin{lstlisting}[gobble=4]
+    Function *F = ...;
+    for (User *U : F->users()) {
+        if (Instruction *Inst = dyn_cast<Instruction>(U)) {
+            errs() << "F is used in instruction:\n";
+            errs() << *Inst << "\n";
+        }
+    \end{lstlisting}
+
+    \vspace{1em}
+    A \emph{use-def} chain is the list of all Values used by a User.
+    \begin{lstlisting}[gobble=4]
+    Instruction *pi = ...;
+
+    for (Use &U : pi->operands()) {
+        Value *v = U.get();
+        // ...
+    }
+    \end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{LLVM IR}
+    \begin{itemize}
+        \item Many classes provide iterators for common collections (BBs in a function, functions in a module)
+        \item LLVM makes extensive use of a custom form of RTTI, similar to C++ \texttt{dynamic\_cast<>}. It provides a number of operators such as ``isa<>'', ``cast<>'', and ``dyn\_cast<>''.
+
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8,escapeinside=~]
+        static bool isLoopInvariant(const Value *V, const Loop *L) {
+            if (isa<Constant>(V) || isa<Argument>(V) || isa<GlobalValue>(V))
+                return true;
+
+            // Otherwise, it must be an instruction...
+            return !L->contains(cast<Instruction>(V)->getParent());
+        }
+        \end{lstlisting}
+
+        \item The Builder API allows you to generate new code during your pass
+        \item Some quirks - In Windows calls that are inside a \_\_try/\_\_except block are emitted as `Invoke' instructions
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[fragile]{Writing a Pass (ExamplePass)}
+    The LLVM documentation recommends building your pass a shared object, to be loaded by clang or opt.
+
+    \begin{overprint}
+        \onslide<1>
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8]
+        $ clang -c -emit-llvm chal.c -o chal.bc
+        $ opt -load /usr/local/lib/LLVMExamplePass.so --example chal.bc > chal_opt.bc
+        Function: decrypt
+        External: rand
+        Function: main
+        External: llvm.memset.p0i8.i64
+        External: srand
+        External: printf
+        External: __isoc99_scanf
+        External: strlen
+        External: memcmp
+        External: puts
+        \end{lstlisting}
+
+        \onslide<2>
+        \begin{lstlisting}[basicstyle=\scriptsize,gobble=8]
+        $ clang -Xclang -load -Xclang /usr/local/lib/LLVMExamplePass.so chal.c
+        Function: decrypt
+        External: rand
+        Function: main
+        External: llvm.memset.p0i8.i64
+        External: srand
+        External: printf
+        External: __isoc99_scanf
+        External: strlen
+        External: memcmp
+        External: puts
+        \end{lstlisting}
+    \end{overprint}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{Writing a Pass}
+    There are tons of interesting things you can do with a pass.
+    \begin{itemize}
+        \item Obfuscation - bogus arguments, constant obfuscation, control flow obfuscation, string encryption, etc.
+        \item Source and target independent taint tracing to detect vulnerabilities
+        \item Measure statistics about code you compile
+    \end{itemize}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}{ExtractBB Pass}
+    What if we could obfuscate a program by making control-flow interprocedural?
+
+    \pause
+    \begin{enumerate}
+        \item Conduct a liveness analysis to determine the set of live variables at the entry of each basic block.
+        \pause
+        \item Extract each basic block into a new function.
+        \pause
+        \item Convert branches to calls.
+        \pause
+        \item Fixup operand uses with their new argument Values.
+        \pause
+        \item Remove PhiNodes.
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (1 - Liveness Analysis)}
+    The arguments for each new function need to be the set of variables that are still \textbf{live} at that point in the function. We can do liveness analysis with multiple postorder traversals of the CFG.
+
+    \vspace{1cm}
+    We know LLVM IR is already in SSA. So we can just follow use-def chain for each inst to get these values.
+
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L99}
+\end{frame}
+
+\begin{frame}{ExtractBB Pass (1 - Liveness Analysis)}
+    \begin{overprint}
+        \onslide<1>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness1.png}
+
+        \onslide<2>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness2.png}
+
+        \onslide<3>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness3.png}
+    \end{overprint}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (2 - Extract Basic Blocks)}
+    \url{https://github.com/shareef12/ExtractBB/blob/master/ExtractBB/Extract.cpp#L257}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (3 - Convert Branches to Calls)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L331}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (4 - Fixup Argument Uses)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L421}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (5 - Remove PHINodes)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L450}
+\end{frame}
+
+%------------------------------------------------
+
+\begin{frame}[focus]
+    Questions?
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%     CLOSING/SUPPLEMENTARY SLIDES
+%----------------------------------------------------------------------------------------
+
+\appendix
+
+\begin{frame}[allowframebreaks]{References}
+    \nocite{*} % Display all references regardless of if they were cited
+    \bibliography{references.bib}
+    \bibliographystyle{plain}
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+
+\end{document}

@@ -54,7 +54,7 @@
 %\subtitle{Subtitle}
 \author{Christian Sharpsten}
 \titlegraphic{\includegraphics[scale=0.6]{images/llvm_logo_derivative.png}}
-%\institute{\todo{\\ Institute Name \\ Institute Address}}
+%\institute{\\ Institute Name \\ Institute Address}
 \date{01 NOV 2019}
 
 %------------------------------------------------
@@ -101,20 +101,20 @@
     \begin{overprint}
         \onslide<1>
         \centering
-        \includegraphics[scale=0.4]{images/high_level_compilation.png}
+        \includegraphics[scale=0.4]{images/high_level_compilation.png}\cite{high_level_compilation}
 
         \onslide<2>
         \centering
         \begin{tikzpicture}
-            \node(a){\includegraphics[scale=0.4]{images/high_level_compilation.png}};
-            \node at(a.center)[draw, red,line width=2pt,ellipse,minimum width=3cm,minimum height=0.7cm,xshift=-0.2cm,yshift=1.15cm]{};
+            \node(a){\includegraphics[scale=0.4]{images/high_level_compilation.png}\cite{high_level_compilation}};
+            \node at(a.center)[draw, red,line width=2pt,ellipse,minimum width=3cm,minimum height=0.7cm,xshift=-0.3cm,yshift=1.15cm]{};
         \end{tikzpicture}
     \end{overprint}
 \end{frame}
 
 \begin{frame}{General Compilation Process}
     \centering
-    \includegraphics[scale=0.325]{images/low_level_compilation.jpg}
+    \includegraphics[scale=0.325]{images/low_level_compilation.jpg}\cite{low_level_compilation}
 \end{frame}
 
 \begin{frame}[fragile]{General Compilation Process (Lexing)}
@@ -129,7 +129,6 @@
             }
             \end{lstlisting}
 
-%            \vspace{1ex}
             \begin{lstlisting}[gobble=12]
             TOK_KEYWORD          "int"       1
             TOK_IDENTIFIER       "main"      1
@@ -231,7 +230,7 @@
             9 - 5 + 2
             \end{lstlisting}
 
-            \includegraphics[width=\textwidth]{images/parse_tree.png}
+            \includegraphics[width=0.95\textwidth]{images/parse_tree.png}\cite{compilers}
 
             \vspace{1em}
             You can use bison to generate a parser for you.
@@ -261,7 +260,7 @@
             9 - 5 + 2
             \end{lstlisting}
 
-            \includegraphics[width=\textwidth]{images/ast.png}
+            \includegraphics[width=0.95\textwidth]{images/ast.png}\cite{compilers}
         \end{overprint}
 
     \column{0.2\textwidth}
@@ -287,6 +286,7 @@
         \minipage{0.32\textwidth}
             \includegraphics[width=\linewidth]{images/ssa3.png}
         \endminipage\hfill
+        \cite{ssa}
     \column{0.2\textwidth}
         \begin{tikzpicture}
             \node(a){\includegraphics[scale=0.4]{images/low_level_compilation_small.png}};
@@ -786,21 +786,45 @@
     \end{enumerate}
 \end{frame}
 
-\begin{frame}{ExtractBB Pass (Liveness Analysis)}
-    \todo{liveness}
-    We know LLVM IR is already in SSA. So we can just follow use-def chain for each inst to get parameters.
+\begin{frame}[fragile]{ExtractBB Pass (1 - Liveness Analysis)}
+    The arguments for each new function need to be the set of variables that are still \textbf{live} at that point in the function. We can do liveness analysis with multiple postorder traversals of the CFG.
 
-    Multiple recursive postorder traversal of the CFG with loop detection
+    \vspace{1cm}
+    We know LLVM IR is already in SSA. So we can just follow use-def chain for each inst to get these values.
+
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L99}
 \end{frame}
 
-\begin{frame}{ExtractBB Pass}
-    \todo{summary}
-    Builder API - Line
-    PHI Handling (always first in BB, even though a phi has two uses, we only need one parameter). (line 94 - dyn\_cast, use-def chain following)
+\begin{frame}{ExtractBB Pass (1 - Liveness Analysis)}
+    \begin{overprint}
+        \onslide<1>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness1.png}
+
+        \onslide<2>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness2.png}
+
+        \onslide<3>
+        \centering
+        \includegraphics[height=0.8\textheight]{images/liveness3.png}
+    \end{overprint}
 \end{frame}
 
-\begin{frame}{ExtractBB Pass}
-    \todo{Demo with IDA screenshots}
+\begin{frame}[fragile]{ExtractBB Pass (2 - Extract Basic Blocks)}
+    \url{https://github.com/shareef12/ExtractBB/blob/master/ExtractBB/Extract.cpp#L257}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (3 - Convert Branches to Calls)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L331}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (4 - Fixup Argument Uses)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L421}
+\end{frame}
+
+\begin{frame}[fragile]{ExtractBB Pass (5 - Remove PHINodes)}
+    \url{https://github.com/shareef12/ExtractBB/blob/8cc4ddf2502353450e88f435b252e39d4bc31c8d/ExtractBB/Extract.cpp#L450}
 \end{frame}
 
 %------------------------------------------------
@@ -819,16 +843,6 @@
     \nocite{*} % Display all references regardless of if they were cited
     \bibliography{references.bib}
     \bibliographystyle{plain}
-\end{frame}
-
-%------------------------------------------------
-
-\begin{frame}{Backup Slide}
-    This is a backup slide, useful to include additional materials to answer questions from the audience.
-    \vfill
-    The package \texttt{appendixnumberbeamer} is used to refrain from numbering appendix slides.
-
-    \todo{LTO?}
 \end{frame}
 
 %----------------------------------------------------------------------------------------
